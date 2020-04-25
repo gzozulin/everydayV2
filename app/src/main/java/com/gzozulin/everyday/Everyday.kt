@@ -52,7 +52,7 @@ import java.util.concurrent.TimeUnit
 // todo: remind only once with K-V storage
 // todo: set reminder when device boots
 
-private const val IS_DEBUG = true
+private const val IS_DEBUG = false
 private const val CURRENT_CNT = 3
 private const val PROGRESS_FULL = 10
 private const val SCORE_MAX = 10f
