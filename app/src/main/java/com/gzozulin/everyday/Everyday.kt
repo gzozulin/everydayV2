@@ -46,7 +46,6 @@ import java.io.File
 import java.util.*
 import java.util.concurrent.TimeUnit
 
-// todo: repo
 // todo: launcher icon
 // todo: increment score anim
 // todo: rearrange the backlog?
