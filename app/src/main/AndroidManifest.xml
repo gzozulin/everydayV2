@@ -25,7 +25,7 @@
 
         </activity>
 
-        <receiver android:name=".NotificationPublisher" />
+        <receiver android:name=".ReminderPublisher" />
 
     </application>
 

@@ -4,6 +4,7 @@ import android.app.*
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.*
 import android.text.Editable
@@ -46,14 +47,21 @@ import java.io.File
 import java.util.*
 import java.util.concurrent.TimeUnit
 
+// region --------------------- ToDo --------------------------------
+
 // todo: launcher icon
 // todo: increment score anim
 // todo: rearrange the backlog?
 // todo: remind only once with K-V storage
 // todo: set reminder when device boots
 
+// endregion --------------------- ToDo --------------------------------
+
+// region --------------------- Constants --------------------------------
+
 private const val IS_DEBUG = false
-private const val CURRENT_CNT = 3
+private const val MIN_CURRENT = 3
+private const val CURRENT_PART = 0.4f
 private const val PROGRESS_FULL = 10
 private const val SCORE_MAX = 10f
 private const val CHANCE_TO_DOWNPLAY = 0.2
@@ -64,6 +72,7 @@ private const val KEY_ADVANCED = "com.gzozulin.advanced"
 private const val NOTIFICATION_CHANNEL_ID = "com.gzozulin.remainder"
 private const val NOTIFICATION_ID = 123
 private const val HOUR_TO_REMIND = 21
+private const val KEY_LAST_REMIND = "com.gzozulin.last_remind"
 
 private val weekends = listOf(Calendar.SATURDAY, Calendar.SUNDAY)
 
@@ -71,6 +80,10 @@ private val patternNewLine = "\n".toPattern()
 private val patternCsv = ";".toPattern()
 
 private val random = Random()
+
+// endregion --------------------- Constants --------------------------------
+
+// region --------------------- Application --------------------------------
 
 lateinit var appContext: Context
 
@@ -80,6 +93,7 @@ val kodein: Kodein = Kodein {
         .databaseBuilder(instance(), EverydayDb::class.java, "everyday-db")
         .fallbackToDestructiveMigration().build() }
     bind<RoutineDao>()          with provider { instance<EverydayDb>().routineDao() }
+    bind<EverydayKeyValue>()    with singleton { EverydayKeyValue(instance()) }
     bind<EverydayViewModel>()   with provider { viewModel }
 }
 
@@ -87,39 +101,13 @@ class EverydayApp : Application() {
     override fun onCreate() {
         super.onCreate()
         appContext = applicationContext
-        //setReminderAlarm()
-    }
-
-    private fun setReminderAlarm() {
-        val notificationIntent = Intent(this, NotificationPublisher::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(this, 0, notificationIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT)
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val calendar: Calendar = Calendar.getInstance().apply {
-            timeInMillis = System.currentTimeMillis()
-            set(Calendar.HOUR_OF_DAY, HOUR_TO_REMIND)
-        }
-        alarmManager.setInexactRepeating(AlarmManager.RTC_WAKEUP, calendar.timeInMillis,
-            AlarmManager.INTERVAL_DAY, pendingIntent)
+        updateReminderAlarm(this)
     }
 }
 
-class NotificationPublisher : BroadcastReceiver() {
-    private val routineDao: RoutineDao by kodein.instance()
+// endregion --------------------- Application --------------------------------
 
-    override fun onReceive(context: Context, intent: Intent) {
-        runBlocking(Dispatchers.IO) {
-            val all = routineDao.getAll()
-            val (_, current) = sortRoutinesByState(all)
-            current.forEach {
-                if (!it.finishedToday) {
-                    showReminderNotification(context)
-                    return@runBlocking
-                }
-            }
-        }
-    }
-}
+// region --------------------- Storage --------------------------------
 
 enum class RoutineState {
     BACKLOG, CURRENT, LEARNED, PAUSED
@@ -183,7 +171,34 @@ abstract class EverydayDb : RoomDatabase() {
     abstract fun routineDao(): RoutineDao
 }
 
-private fun sortRoutinesByState(routines: List<Routine>): List<MutableList<Routine>> {
+private class EverydayKeyValue(context: Context) {
+    private val preferences: SharedPreferences =
+        context.getSharedPreferences("com.gzozulin.preferences", Context.MODE_PRIVATE)
+
+    val shouldRemindToday: Boolean
+        get() {
+            val today = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+            val lastRemind = preferences.getInt(KEY_LAST_REMIND, -1)
+            if (today != lastRemind) {
+                preferences.edit().putInt(KEY_LAST_REMIND, today).apply()
+                return true
+            }
+            return false
+        }
+}
+
+// endregion --------------------- Storage --------------------------------
+
+// region --------------------- ViewModel --------------------------------
+
+data class SortedRoutines(
+    val backlog: MutableList<Routine>,
+    val current: MutableList<Routine>,
+    val learned: MutableList<Routine>,
+    val paused: MutableList<Routine>
+)
+
+private fun sortRoutinesByState(routines: List<Routine>): SortedRoutines {
     val backlog = mutableListOf<Routine>()
     val current = mutableListOf<Routine>()
     val learned = mutableListOf<Routine>()
@@ -196,7 +211,7 @@ private fun sortRoutinesByState(routines: List<Routine>): List<MutableList<Routi
             RoutineState.PAUSED -> paused.add(routine)
         }
     }
-    return listOf(backlog, current, learned, paused)
+    return SortedRoutines(backlog, current, learned, paused)
 }
 
 class EverydayViewModel : ViewModel() {
@@ -300,12 +315,14 @@ class EverydayViewModel : ViewModel() {
     private fun refillCurrentFromBacklog() {
         viewModelScope.launch {
             val routines = routinesDao.getAll()
-            val (backlog, current, _, _) = sortRoutinesByState(routines)
-            if (current.size >= CURRENT_CNT) {
+            val (backlog, current, learned, _) = sortRoutinesByState(routines)
+            val activeCnt = backlog.size + current.size + learned.size
+            val expectedCurrentCnt = maxOf(MIN_CURRENT, (activeCnt * CURRENT_PART).toInt())
+            if (current.size >= expectedCurrentCnt) {
                 return@launch
             }
             backlog.sortBy { it.progress }
-            while (backlog.isNotEmpty() && current.size < CURRENT_CNT) {
+            while (backlog.isNotEmpty() && current.size < expectedCurrentCnt) {
                 val routine = backlog.removeAt(0)
                 routine.state = RoutineState.CURRENT
                 current.add(routine)
@@ -403,6 +420,10 @@ class EverydayViewModel : ViewModel() {
         }
     }
 }
+
+// endregion --------------------- ViewModel --------------------------------
+
+// region --------------------- Activity --------------------------------
 
 private lateinit var viewModel: EverydayViewModel
 
@@ -603,6 +624,10 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
+// endregion --------------------- Activity --------------------------------
+
+// region --------------------- Dialogs --------------------------------
+
 private fun showAddDialog(context: Context) {
     val builder = AlertDialog.Builder(context)
     val view = LayoutInflater.from(context).inflate(R.layout.dialog_add, null)
@@ -668,36 +693,9 @@ private fun showUpdateDialog(context: Context, routine: Routine) {
     dialog.show()
 }
 
-private fun createNotificationChannel(context: Context) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        val importance = NotificationManager.IMPORTANCE_DEFAULT
-        val channel = NotificationChannel(NOTIFICATION_CHANNEL_ID, "Everyday reminders", importance)
-        channel.description = "Missed routines for today"
-        val notificationManager: NotificationManager =
-            getSystemService(context, NotificationManager::class.java) as NotificationManager
-        notificationManager.createNotificationChannel(channel)
-    }
-}
+// endregion --------------------- Dialogs --------------------------------
 
-private fun showReminderNotification(context: Context) {
-    val intent = Intent(context, MainActivity::class.java).apply {
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-    }
-    val pendingIntent: PendingIntent = PendingIntent.getActivity(context, 0, intent, 0)
-    val builder = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-        NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID) else
-        NotificationCompat.Builder(context))
-    builder
-        .setSmallIcon(R.drawable.remainder)
-        .setContentTitle("Everyday reminder")
-        .setContentText("Some of your routines aren't marked as being finished")
-        .setStyle(NotificationCompat.BigTextStyle()
-            .bigText("Some of your routines aren't marked as being finished"))
-        .setContentIntent(pendingIntent)
-        .setAutoCancel(true)
-        .priority = NotificationCompat.PRIORITY_DEFAULT
-    NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
-}
+// region --------------------- Adapter --------------------------------
 
 private class RoutineViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
     private val viewModel: EverydayViewModel by kodein.instance()
@@ -759,3 +757,74 @@ private class RoutinesAdapter(val items: List<Routine>)
         holder.bind(items[position])
     }
 }
+
+// endregion --------------------- Adapter --------------------------------
+
+// region --------------------- Reminder --------------------------------
+
+private fun updateReminderAlarm(context: Context) {
+    val notificationIntent = Intent(context, ReminderPublisher::class.java)
+    val pendingIntent = PendingIntent.getBroadcast(context, 0, notificationIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT)
+    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    val calendar: Calendar = Calendar.getInstance().apply {
+        timeInMillis = System.currentTimeMillis()
+        set(Calendar.HOUR_OF_DAY, HOUR_TO_REMIND)
+    }
+    alarmManager.setInexactRepeating(AlarmManager.RTC_WAKEUP,
+        calendar.timeInMillis,
+        AlarmManager.INTERVAL_DAY, pendingIntent)
+}
+
+class ReminderPublisher : BroadcastReceiver() {
+    private val routineDao: RoutineDao by kodein.instance()
+    private val preferences: EverydayKeyValue by kodein.instance()
+
+    override fun onReceive(context: Context, intent: Intent) {
+        runBlocking(Dispatchers.IO) {
+            if (preferences.shouldRemindToday) {
+                val all = routineDao.getAll()
+                val (_, current) = sortRoutinesByState(all)
+                current.forEach {
+                    if (!it.finishedToday) {
+                        showReminderNotification(context)
+                        return@runBlocking
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun createNotificationChannel(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val channel = NotificationChannel(NOTIFICATION_CHANNEL_ID, "Everyday reminders", importance)
+        channel.description = "Missed routines for today"
+        val notificationManager: NotificationManager =
+            getSystemService(context, NotificationManager::class.java) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
+    }
+}
+
+private fun showReminderNotification(context: Context) {
+    val intent = Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    }
+    val pendingIntent: PendingIntent = PendingIntent.getActivity(context, 0, intent, 0)
+    val builder = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+        NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID) else
+        NotificationCompat.Builder(context))
+    builder
+        .setSmallIcon(R.drawable.remainder)
+        .setContentTitle("Everyday reminder")
+        .setContentText("Some of your routines aren't marked as being finished")
+        .setStyle(NotificationCompat.BigTextStyle()
+            .bigText("Some of your routines aren't marked as being finished"))
+        .setContentIntent(pendingIntent)
+        .setAutoCancel(true)
+        .priority = NotificationCompat.PRIORITY_DEFAULT
+    NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
+}
+
+// endregion --------------------- Reminder --------------------------------
