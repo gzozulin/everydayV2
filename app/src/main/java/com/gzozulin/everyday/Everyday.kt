@@ -52,7 +52,6 @@ import java.util.concurrent.TimeUnit
 // todo: launcher icon
 // todo: increment score anim
 // todo: rearrange the backlog?
-// todo: remind only once with K-V storage
 // todo: set reminder when device boots
 
 // endregion --------------------- ToDo --------------------------------
@@ -175,16 +174,15 @@ private class EverydayKeyValue(context: Context) {
     private val preferences: SharedPreferences =
         context.getSharedPreferences("com.gzozulin.preferences", Context.MODE_PRIVATE)
 
-    val shouldRemindToday: Boolean
-        get() {
-            val today = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
-            val lastRemind = preferences.getInt(KEY_LAST_REMIND, -1)
-            if (today != lastRemind) {
-                preferences.edit().putInt(KEY_LAST_REMIND, today).apply()
-                return true
-            }
-            return false
+    suspend fun shouldRemindToday() = withContext(Dispatchers.IO) {
+        val today = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+        val lastRemind = preferences.getInt(KEY_LAST_REMIND, -1)
+        if (today != lastRemind) {
+            preferences.edit().putInt(KEY_LAST_REMIND, today).apply()
+            return@withContext true
         }
+        return@withContext false
+    }
 }
 
 // endregion --------------------- Storage --------------------------------
@@ -782,7 +780,7 @@ class ReminderPublisher : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         runBlocking(Dispatchers.IO) {
-            if (preferences.shouldRemindToday) {
+            if (preferences.shouldRemindToday()) {
                 val all = routineDao.getAll()
                 val (_, current) = sortRoutinesByState(all)
                 current.forEach {
@@ -807,7 +805,7 @@ private fun createNotificationChannel(context: Context) {
     }
 }
 
-private fun showReminderNotification(context: Context) {
+private suspend fun showReminderNotification(context: Context) = withContext(Dispatchers.Main) {
     val intent = Intent(context, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
     }
