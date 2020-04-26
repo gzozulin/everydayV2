@@ -53,6 +53,8 @@ import java.util.concurrent.TimeUnit
 // todo: increment score anim
 // todo: rearrange the backlog?
 // todo: set reminder when device boots
+// todo: calendar, points from advance
+// todo: self-set prizes
 
 // endregion --------------------- ToDo --------------------------------
 
