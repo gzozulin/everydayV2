@@ -29,9 +29,12 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.room.*
 import androidx.viewpager2.adapter.FragmentStateAdapter
+import androidx.viewpager2.widget.ViewPager2
 import butterknife.BindView
 import butterknife.ButterKnife
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayoutMediator
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
@@ -433,44 +436,14 @@ private lateinit var viewModel: EverydayViewModel
 class MainActivity : AppCompatActivity() {
     private val disposable = CompositeDisposable()
 
-    @BindView(R.id.score)
-    lateinit var scoreTextView: TextView
+    @BindView(R.id.pager)
+    lateinit var viewPager: ViewPager2
+
+    @BindView(R.id.tab_layout)
+    lateinit var tabLayout: TabLayout
 
     @BindView(R.id.konfetti)
     lateinit var viewKonfetti: KonfettiView
-
-    @BindView(R.id.header_current)
-    lateinit var headerCurrentView: View
-
-    @BindView(R.id.backlog)
-    lateinit var backlogList: RecyclerView
-
-    @BindView(R.id.header_backlog)
-    lateinit var headerBacklogView: View
-
-    @BindView(R.id.current)
-    lateinit var currentList: RecyclerView
-
-    @BindView(R.id.header_learned)
-    lateinit var headerLearnedView: View
-
-    @BindView(R.id.learned)
-    lateinit var learnedList: RecyclerView
-
-    @BindView(R.id.header_paused)
-    lateinit var headerPausedView: View
-
-    @BindView(R.id.paused)
-    lateinit var pausedList: RecyclerView
-
-    @BindView(R.id.advance)
-    lateinit var advanceButton: Button
-
-    @BindView(R.id.exportBtn)
-    lateinit var exportButton: Button
-
-    @BindView(R.id.importBtn)
-    lateinit var importButton: Button
 
     @BindView(R.id.add)
     lateinit var addButton: FloatingActionButton
@@ -480,12 +453,9 @@ class MainActivity : AppCompatActivity() {
         viewModel = ViewModelProvider(this).get(EverydayViewModel::class.java)
         setContentView(R.layout.activity_main)
         ButterKnife.bind(this)
-        subscribeRoutines()
-        subscribeCurrentScore()
+        createTabs()
         subscribeKonfetti()
-        bootstrapAdvance()
         bootstrapAdd()
-        bootstrapExportImport()
         createNotificationChannel(this)
     }
 
@@ -499,89 +469,21 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    private fun subscribeRoutines() {
-        backlogList.layoutManager = LinearLayoutManager(this)
-        disposable.add(viewModel.backlogRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
-            if (it.isNotEmpty()) {
-                headerBacklogView.visibility = View.VISIBLE
-                backlogList.visibility = View.VISIBLE
-                backlogList.adapter = RoutinesAdapter(it)
-            } else {
-                headerBacklogView.visibility = View.GONE
-                backlogList.visibility = View.GONE
+    private fun createTabs() {
+        viewPager.adapter = EverydayTabsAdapter(this)
+        TabLayoutMediator(tabLayout, viewPager) { tab, position ->
+            tab.text = when(position) {
+                0 -> "ROUTINES"
+                1 -> "CALENDAR"
+                else -> TODO()
             }
-        })
-        currentList.layoutManager = LinearLayoutManager(this)
-        disposable.add(viewModel.currentRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
-            if (it.isNotEmpty()) {
-                headerCurrentView.visibility = View.VISIBLE
-                currentList.visibility = View.VISIBLE
-                currentList.adapter = RoutinesAdapter(it)
-            } else {
-                headerCurrentView.visibility = View.GONE
-                currentList.visibility = View.GONE
-            }
-        })
-        learnedList.layoutManager = LinearLayoutManager(this)
-        disposable.add(viewModel.learnedRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
-            if (it.isNotEmpty()) {
-                headerLearnedView.visibility = View.VISIBLE
-                learnedList.visibility = View.VISIBLE
-                learnedList.adapter = RoutinesAdapter(it)
-            } else {
-                headerLearnedView.visibility = View.GONE
-                learnedList.visibility = View.GONE
-            }
-        })
-        pausedList.layoutManager = LinearLayoutManager(this)
-        disposable.add(viewModel.pausedRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
-            if (it.isNotEmpty()) {
-                headerPausedView.visibility = View.VISIBLE
-                pausedList.visibility = View.VISIBLE
-                pausedList.adapter = RoutinesAdapter(it)
-            } else {
-                headerPausedView.visibility = View.GONE
-                pausedList.visibility = View.GONE
-            }
-        })
-    }
-
-    private fun subscribeCurrentScore() {
-        disposable.add(viewModel.score.observeOn(AndroidSchedulers.mainThread())
-            .subscribe { score ->
-                scoreTextView.text = FLOAT_FORMAT.format(score)
-                scoreTextView.setTextColor(
-                    when {
-                        score > GREAT_SCORE -> Color.parseColor("#0DE320")
-                        score > NORMAL_SCORE -> Color.parseColor("#EAC108")
-                        else -> Color.parseColor("#000000")
-                    }
-                )
-        })
-    }
-
-    private fun bootstrapAdvance() {
-        advanceButton.setOnClickListener {
-            viewModel.advance()
-        }
-        advanceButton.visibility = if (IS_DEBUG) View.VISIBLE else View.GONE
+        }.attach()
     }
 
     private fun bootstrapAdd() {
         addButton.setOnClickListener {
             showAddDialog(this)
         }
-    }
-
-    private fun bootstrapExportImport() {
-        exportButton.setOnClickListener {
-            viewModel.exportRoutines()
-        }
-        exportButton.visibility = if (IS_DEBUG) View.VISIBLE else View.GONE
-        importButton.setOnClickListener {
-            viewModel.importRoutines()
-        }
-        importButton.visibility = if (IS_DEBUG) View.VISIBLE else View.GONE
     }
 
     private fun subscribeKonfetti() {
@@ -639,13 +541,154 @@ class EverydayTabsAdapter(activity: FragmentActivity) : FragmentStateAdapter(act
     }
 }
 
-class RoutinesFragment : Fragment() {
+// region --------------------- RoutinesFragment --------------------------------
 
+class RoutinesFragment : Fragment() {
+    private val disposable = CompositeDisposable()
+
+    @BindView(R.id.score)
+    lateinit var scoreTextView: TextView
+
+    @BindView(R.id.header_current)
+    lateinit var headerCurrentView: View
+
+    @BindView(R.id.current)
+    lateinit var currentList: RecyclerView
+
+    @BindView(R.id.header_backlog)
+    lateinit var headerBacklogView: View
+
+    @BindView(R.id.backlog)
+    lateinit var backlogList: RecyclerView
+
+    @BindView(R.id.header_learned)
+    lateinit var headerLearnedView: View
+
+    @BindView(R.id.learned)
+    lateinit var learnedList: RecyclerView
+
+    @BindView(R.id.header_paused)
+    lateinit var headerPausedView: View
+
+    @BindView(R.id.paused)
+    lateinit var pausedList: RecyclerView
+
+    @BindView(R.id.advance)
+    lateinit var advanceButton: Button
+
+    @BindView(R.id.exportBtn)
+    lateinit var exportButton: Button
+
+    @BindView(R.id.importBtn)
+    lateinit var importButton: Button
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+        val view = LayoutInflater.from(context).inflate(R.layout.fragment_routines, container)
+        ButterKnife.bind(this, view)
+        return view
+    }
+
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
+        super.onActivityCreated(savedInstanceState)
+        subscribeCurrentScore()
+        subscribeRoutines()
+        bootstrapAdvance()
+        bootstrapExportImport()
+    }
+
+    private fun subscribeCurrentScore() {
+        disposable.add(viewModel.score.observeOn(AndroidSchedulers.mainThread())
+            .subscribe { score ->
+                scoreTextView.text = FLOAT_FORMAT.format(score)
+                scoreTextView.setTextColor(
+                    when {
+                        score > GREAT_SCORE -> Color.parseColor("#0DE320")
+                        score > NORMAL_SCORE -> Color.parseColor("#EAC108")
+                        else -> Color.parseColor("#000000")
+                    }
+                )
+            })
+    }
+
+    private fun subscribeRoutines() {
+        backlogList.layoutManager = LinearLayoutManager(context)
+        disposable.add(viewModel.backlogRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
+            if (it.isNotEmpty()) {
+                headerBacklogView.visibility = View.VISIBLE
+                backlogList.visibility = View.VISIBLE
+                backlogList.adapter = RoutinesAdapter(it)
+            } else {
+                headerBacklogView.visibility = View.GONE
+                backlogList.visibility = View.GONE
+            }
+        })
+        currentList.layoutManager = LinearLayoutManager(context)
+        disposable.add(viewModel.currentRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
+            if (it.isNotEmpty()) {
+                headerCurrentView.visibility = View.VISIBLE
+                currentList.visibility = View.VISIBLE
+                currentList.adapter = RoutinesAdapter(it)
+            } else {
+                headerCurrentView.visibility = View.GONE
+                currentList.visibility = View.GONE
+            }
+        })
+        learnedList.layoutManager = LinearLayoutManager(context)
+        disposable.add(viewModel.learnedRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
+            if (it.isNotEmpty()) {
+                headerLearnedView.visibility = View.VISIBLE
+                learnedList.visibility = View.VISIBLE
+                learnedList.adapter = RoutinesAdapter(it)
+            } else {
+                headerLearnedView.visibility = View.GONE
+                learnedList.visibility = View.GONE
+            }
+        })
+        pausedList.layoutManager = LinearLayoutManager(context)
+        disposable.add(viewModel.pausedRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
+            if (it.isNotEmpty()) {
+                headerPausedView.visibility = View.VISIBLE
+                pausedList.visibility = View.VISIBLE
+                pausedList.adapter = RoutinesAdapter(it)
+            } else {
+                headerPausedView.visibility = View.GONE
+                pausedList.visibility = View.GONE
+            }
+        })
+    }
+
+    private fun bootstrapExportImport() {
+        exportButton.setOnClickListener {
+            viewModel.exportRoutines()
+        }
+        exportButton.visibility = if (IS_DEBUG) View.VISIBLE else View.GONE
+        importButton.setOnClickListener {
+            viewModel.importRoutines()
+        }
+        importButton.visibility = if (IS_DEBUG) View.VISIBLE else View.GONE
+    }
+
+    private fun bootstrapAdvance() {
+        advanceButton.setOnClickListener {
+            viewModel.advance()
+        }
+        advanceButton.visibility = if (IS_DEBUG) View.VISIBLE else View.GONE
+    }
 }
+
+// endregion --------------------- RoutinesFragment --------------------------------
+
+// region --------------------- CalendarFragment --------------------------------
 
 class CalendarFragment : Fragment() {
-
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+        val view = LayoutInflater.from(context).inflate(R.layout.fragment_calendar, container)
+        ButterKnife.bind(this, view)
+        return view
+    }
 }
+
+// endregion --------------------- CalendarFragment --------------------------------
 
 // endregion --------------------- Activity --------------------------------
 

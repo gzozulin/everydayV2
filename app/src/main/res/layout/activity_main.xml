@@ -6,111 +6,16 @@
         android:layout_height="match_parent"
         tools:context=".MainActivity">
 
-    <TextView
-        android:id="@+id/score"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_centerHorizontal="true"
-        android:textSize="48sp"
-        android:padding="16dp"
-        android:text="10"/>
-
-    <ScrollView
-        android:id="@+id/routines"
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tab_layout"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_below="@id/score">
+        android:layout_height="wrap_content" />
 
-        <LinearLayout
-            android:orientation="vertical"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content">
-
-            <TextView
-                android:id="@+id/header_current"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="current"
-                android:textAlignment="center"
-                android:layout_gravity="center_horizontal"
-                android:background="@color/colorAccent"
-                android:textSize="24sp"/>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/current"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="16dp"/>
-
-            <TextView
-                android:id="@+id/header_backlog"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="backlog"
-                android:textAlignment="center"
-                android:layout_gravity="center_horizontal"
-                android:background="@color/colorAccent"
-                android:textSize="24sp"/>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/backlog"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="16dp"/>
-
-            <TextView
-                android:id="@+id/header_learned"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="learned"
-                android:textAlignment="center"
-                android:layout_gravity="center_horizontal"
-                android:background="@color/colorAccent"
-                android:textSize="24sp"/>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/learned"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="16dp"/>
-
-            <TextView
-                android:id="@+id/header_paused"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="paused"
-                android:textAlignment="center"
-                android:layout_gravity="center_horizontal"
-                android:background="@color/colorAccent"
-                android:textSize="24sp"/>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/paused"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="16dp"/>
-
-            <Button
-                android:id="@+id/advance"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="ADVANCE"/>
-
-            <Button
-                android:id="@+id/exportBtn"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="EXPORT"/>
-
-            <Button
-                android:id="@+id/importBtn"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="IMPORT"/>
-
-        </LinearLayout>
-
-    </ScrollView>
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/pager"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/tab_layout"/>
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/add"
