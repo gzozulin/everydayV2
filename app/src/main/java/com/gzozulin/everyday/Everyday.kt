@@ -35,11 +35,17 @@ import butterknife.ButterKnife
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import com.jakewharton.threetenabp.AndroidThreeTen
+import com.kizitonwose.calendarview.CalendarView
+import com.kizitonwose.calendarview.model.CalendarDay
+import com.kizitonwose.calendarview.ui.DayBinder
+import com.kizitonwose.calendarview.ui.ViewContainer
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
+import kotlinx.android.synthetic.main.calendar_day_layout.view.*
 import kotlinx.coroutines.*
 import nl.dionsegijn.konfetti.KonfettiView
 import nl.dionsegijn.konfetti.models.Shape
@@ -49,6 +55,8 @@ import org.kodein.di.generic.bind
 import org.kodein.di.generic.instance
 import org.kodein.di.generic.provider
 import org.kodein.di.generic.singleton
+import org.threeten.bp.YearMonth
+import org.threeten.bp.temporal.WeekFields
 import java.io.File
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -107,6 +115,7 @@ val kodein: Kodein = Kodein {
 class EverydayApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        AndroidThreeTen.init(this)
         appContext = applicationContext
         updateReminderAlarm(this)
     }
@@ -681,10 +690,45 @@ class RoutinesFragment : Fragment() {
 // region --------------------- CalendarFragment --------------------------------
 
 class CalendarFragment : Fragment() {
+    @BindView(R.id.calendar)
+    lateinit var calendarView: CalendarView
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         val view = LayoutInflater.from(context).inflate(R.layout.fragment_calendar, container)
         ButterKnife.bind(this, view)
         return view
+    }
+
+    override fun onActivityCreated(savedInstanceState: Bundle?) {
+        super.onActivityCreated(savedInstanceState)
+        bootstrapCalendar()
+    }
+
+    private fun bootstrapCalendar() {
+        calendarView.dayBinder = EverydayDayBinder()
+        val currentMonth = YearMonth.now()
+        val firstMonth = currentMonth.minusMonths(10)
+        val lastMonth = currentMonth.plusMonths(10)
+        val firstDayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+        calendarView.setup(firstMonth, lastMonth, firstDayOfWeek)
+        calendarView.scrollToMonth(currentMonth)
+    }
+}
+
+private class EverydayDayBinder : DayBinder<DayViewContainer> {
+    override fun create(view: View) = DayViewContainer(view)
+
+    override fun bind(container: DayViewContainer, day: CalendarDay) {
+        container.textView.text = day.date.dayOfMonth.toString()
+    }
+}
+
+private class DayViewContainer(view: View) : ViewContainer(view) {
+    @BindView(R.id.calendarDayText)
+    lateinit var textView: TextView
+
+    init {
+        ButterKnife.bind(this, view)
     }
 }
 
