@@ -20,12 +20,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat.getSystemService
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.room.*
+import androidx.viewpager2.adapter.FragmentStateAdapter
 import butterknife.BindView
 import butterknife.ButterKnife
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -67,8 +70,8 @@ private const val PROGRESS_FULL = 10
 private const val SCORE_MAX = 10f
 private const val CHANCE_TO_DOWNPLAY = 0.2
 private const val FLOAT_FORMAT = "%.1f"
-private const val NORMAL_SCORE = 4.9
-private const val GREAT_SCORE = 8.4
+private const val NORMAL_SCORE = 3.9
+private const val GREAT_SCORE = 7.9
 private const val KEY_ADVANCED = "com.gzozulin.advanced"
 private const val NOTIFICATION_CHANNEL_ID = "com.gzozulin.remainder"
 private const val NOTIFICATION_ID = 123
@@ -215,8 +218,8 @@ private fun sortRoutinesByState(routines: List<Routine>): SortedRoutines {
 }
 
 class EverydayViewModel : ViewModel() {
-    private val routinesDao: RoutineDao by kodein.instance()
-    private val appContext: Context by kodein.instance()
+    private val routinesDao by kodein.instance<RoutineDao>()
+    private val appContext by kodein.instance<Context>()
 
     private val exported = File(appContext.getExternalFilesDir(null), "everyday_exported")
 
@@ -624,6 +627,26 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
+class EverydayTabsAdapter(activity: FragmentActivity) : FragmentStateAdapter(activity) {
+    override fun getItemCount(): Int = 2
+
+    override fun createFragment(position: Int): Fragment {
+        return when (position) {
+            0 -> RoutinesFragment()
+            1 -> CalendarFragment()
+            else -> TODO()
+        }
+    }
+}
+
+class RoutinesFragment : Fragment() {
+
+}
+
+class CalendarFragment : Fragment() {
+
+}
+
 // endregion --------------------- Activity --------------------------------
 
 // region --------------------- Dialogs --------------------------------
@@ -698,7 +721,7 @@ private fun showUpdateDialog(context: Context, routine: Routine) {
 // region --------------------- Adapter --------------------------------
 
 private class RoutineViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-    private val viewModel: EverydayViewModel by kodein.instance()
+    private val viewModel by kodein.instance<EverydayViewModel>()
 
     @BindView(R.id.progress)
     lateinit var progressProgressBar: ProgressBar
@@ -777,8 +800,8 @@ private fun updateReminderAlarm(context: Context) {
 }
 
 class ReminderPublisher : BroadcastReceiver() {
-    private val routineDao: RoutineDao by kodein.instance()
-    private val preferences: EverydayKeyValue by kodein.instance()
+    private val routineDao by kodein.instance<RoutineDao>()
+    private val preferences by kodein.instance<EverydayKeyValue>()
 
     override fun onReceive(context: Context, intent: Intent) {
         runBlocking(Dispatchers.IO) {
