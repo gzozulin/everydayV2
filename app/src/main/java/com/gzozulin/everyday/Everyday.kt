@@ -61,6 +61,7 @@ import org.threeten.bp.YearMonth
 import org.threeten.bp.format.TextStyle
 import org.threeten.bp.temporal.WeekFields
 import java.io.File
+import java.sql.Time
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -71,6 +72,7 @@ import java.util.concurrent.TimeUnit
 // todo: rearrange the backlog?
 // todo: set reminder when device boots
 // todo: calendar, points from advance
+// todo: export score as well
 // todo: self-set prizes
 // todo: crash reporting
 
@@ -78,7 +80,7 @@ import java.util.concurrent.TimeUnit
 
 // region --------------------- Constants --------------------------------
 
-private const val IS_DEBUG = false
+private const val IS_DEBUG = true
 private const val MIN_CURRENT = 3
 private const val CURRENT_PART = 0.4f
 private const val PROGRESS_FULL = 10
@@ -112,6 +114,7 @@ val kodein: Kodein = Kodein {
         .databaseBuilder(instance(), EverydayDb::class.java, "everyday-db")
         .fallbackToDestructiveMigration().build() }
     bind<RoutineDao>()          with provider { instance<EverydayDb>().routineDao() }
+    bind<ScoreDao>()            with provider { instance<EverydayDb>().scoreDao() }
     bind<EverydayKeyValue>()    with singleton { EverydayKeyValue(instance()) }
     bind<EverydayViewModel>()   with provider { viewModel }
 }
@@ -177,6 +180,22 @@ interface RoutineDao {
     fun deleteAll()
 }
 
+@Entity
+data class Score (
+    @PrimaryKey(autoGenerate = true) val uid: Long = 0,
+    @ColumnInfo val timestamp: Long,
+    @ColumnInfo val score: Float
+)
+
+@Dao
+interface ScoreDao {
+    @Query("SELECT * FROM score")
+    fun subscribeAll(): Observable<List<Score>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(score: Score)
+}
+
 class EverydayConverters {
     @TypeConverter
     fun fromRoutineState(state: RoutineState) = state.ordinal
@@ -185,10 +204,11 @@ class EverydayConverters {
     fun toRoutineState(state: Int) = RoutineState.values()[state]
 }
 
-@Database(entities = [Routine::class], version = 6)
+@Database(entities = [Routine::class, Score::class], version = 7)
 @TypeConverters(EverydayConverters::class)
 abstract class EverydayDb : RoomDatabase() {
     abstract fun routineDao(): RoutineDao
+    abstract fun scoreDao(): ScoreDao
 }
 
 private class EverydayKeyValue(context: Context) {
@@ -235,6 +255,7 @@ private fun sortRoutinesByState(routines: List<Routine>): SortedRoutines {
 
 class EverydayViewModel : ViewModel() {
     private val routinesDao by kodein.instance<RoutineDao>()
+    private val scoreDao by kodein.instance<ScoreDao>()
     private val appContext by kodein.instance<Context>()
 
     private val exported = File(appContext.getExternalFilesDir(null), "everyday_exported")
@@ -293,11 +314,12 @@ class EverydayViewModel : ViewModel() {
         return weekends.contains(Calendar.getInstance().get(Calendar.DAY_OF_WEEK))
     }
 
-    fun advance() {
+    fun advance(timestamp: Long) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 val routines = routinesDao.getAll()
                 val (backlog, current, learned, _) = sortRoutinesByState(routines)
+                scoreDao.insert(Score(0L, timestamp = timestamp, score = calculateCurrentScore(current)))
                 val currIter = current.iterator()
                 while (currIter.hasNext()) {
                     val routine = currIter.next()
@@ -532,9 +554,11 @@ class MainActivity : AppCompatActivity() {
                 val today = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
                 val advanced = preferences.getInt(KEY_ADVANCED, today)
                 var times = today - advanced
+                var timestamp = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(times.toLong())
                 while (times > 0) {
-                    viewModel.advance()
+                    viewModel.advance(timestamp)
                     times--
+                    timestamp += TimeUnit.DAYS.toMillis(1)
                 }
                 preferences.edit().putInt(KEY_ADVANCED, today).apply()
             }
@@ -685,7 +709,7 @@ class RoutinesFragment : Fragment() {
 
     private fun bootstrapAdvance() {
         advanceButton.setOnClickListener {
-            viewModel.advance()
+            viewModel.advance(System.currentTimeMillis())
         }
         advanceButton.visibility = if (IS_DEBUG) View.VISIBLE else View.GONE
     }

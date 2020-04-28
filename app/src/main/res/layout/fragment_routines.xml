@@ -38,7 +38,7 @@
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/current"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:padding="16dp"/>
 
             <TextView
@@ -54,7 +54,7 @@
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/backlog"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:padding="16dp"/>
 
             <TextView
@@ -70,7 +70,7 @@
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/learned"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:padding="16dp"/>
 
             <TextView
