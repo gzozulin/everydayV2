@@ -38,14 +38,15 @@ import com.google.android.material.tabs.TabLayoutMediator
 import com.jakewharton.threetenabp.AndroidThreeTen
 import com.kizitonwose.calendarview.CalendarView
 import com.kizitonwose.calendarview.model.CalendarDay
+import com.kizitonwose.calendarview.model.CalendarMonth
 import com.kizitonwose.calendarview.ui.DayBinder
+import com.kizitonwose.calendarview.ui.MonthHeaderFooterBinder
 import com.kizitonwose.calendarview.ui.ViewContainer
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
-import kotlinx.android.synthetic.main.calendar_day_layout.view.*
 import kotlinx.coroutines.*
 import nl.dionsegijn.konfetti.KonfettiView
 import nl.dionsegijn.konfetti.models.Shape
@@ -55,7 +56,9 @@ import org.kodein.di.generic.bind
 import org.kodein.di.generic.instance
 import org.kodein.di.generic.provider
 import org.kodein.di.generic.singleton
+import org.threeten.bp.Month
 import org.threeten.bp.YearMonth
+import org.threeten.bp.format.TextStyle
 import org.threeten.bp.temporal.WeekFields
 import java.io.File
 import java.util.*
@@ -69,6 +72,7 @@ import java.util.concurrent.TimeUnit
 // todo: set reminder when device boots
 // todo: calendar, points from advance
 // todo: self-set prizes
+// todo: crash reporting
 
 // endregion --------------------- ToDo --------------------------------
 
@@ -550,6 +554,8 @@ class EverydayTabsAdapter(activity: FragmentActivity) : FragmentStateAdapter(act
     }
 }
 
+// endregion --------------------- Activity --------------------------------
+
 // region --------------------- RoutinesFragment --------------------------------
 
 class RoutinesFragment : Fragment() {
@@ -706,6 +712,7 @@ class CalendarFragment : Fragment() {
 
     private fun bootstrapCalendar() {
         calendarView.dayBinder = EverydayDayBinder()
+        calendarView.monthHeaderBinder = EverydayMonthHeaderBinder()
         val currentMonth = YearMonth.now()
         val firstMonth = currentMonth.minusMonths(10)
         val lastMonth = currentMonth.plusMonths(10)
@@ -719,22 +726,45 @@ private class EverydayDayBinder : DayBinder<DayViewContainer> {
     override fun create(view: View) = DayViewContainer(view)
 
     override fun bind(container: DayViewContainer, day: CalendarDay) {
-        container.textView.text = day.date.dayOfMonth.toString()
+        container.bind(day)
     }
 }
 
 private class DayViewContainer(view: View) : ViewContainer(view) {
-    @BindView(R.id.calendarDayText)
+    @BindView(R.id.dayText)
     lateinit var textView: TextView
 
     init {
         ButterKnife.bind(this, view)
     }
+
+    fun bind(day: CalendarDay) {
+        textView.text = day.date.dayOfMonth.toString()
+    }
+}
+
+private class EverydayMonthHeaderBinder : MonthHeaderFooterBinder<MonthHeaderContainer> {
+    override fun create(view: View) = MonthHeaderContainer(view)
+
+    override fun bind(container: MonthHeaderContainer, month: CalendarMonth) {
+        container.bind(month)
+    }
+}
+
+private class MonthHeaderContainer(view: View) : ViewContainer(view) {
+    @BindView(R.id.monthText)
+    lateinit var monthText: TextView
+
+    init {
+        ButterKnife.bind(this, view)
+    }
+
+    fun bind(month: CalendarMonth) {
+        monthText.text = Month.of(month.month).getDisplayName(TextStyle.FULL_STANDALONE, Locale.CANADA)
+    }
 }
 
 // endregion --------------------- CalendarFragment --------------------------------
-
-// endregion --------------------- Activity --------------------------------
 
 // region --------------------- Dialogs --------------------------------
 
