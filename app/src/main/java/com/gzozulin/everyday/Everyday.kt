@@ -738,10 +738,9 @@ class CalendarFragment : Fragment() {
         calendarView.dayBinder = EverydayDayBinder()
         calendarView.monthHeaderBinder = EverydayMonthHeaderBinder()
         val currentMonth = YearMonth.now()
-        val firstMonth = currentMonth.minusMonths(10)
-        val lastMonth = currentMonth.plusMonths(10)
+        val firstMonth = currentMonth.minusMonths(11)
         val firstDayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek
-        calendarView.setup(firstMonth, lastMonth, firstDayOfWeek)
+        calendarView.setup(firstMonth, currentMonth, firstDayOfWeek)
         calendarView.scrollToMonth(currentMonth)
     }
 }
