@@ -601,9 +601,9 @@ fun View.animateVisible() {
     }
 }
 
-fun scoreToColor(score: Float) = when {
-    score > GREAT_SCORE -> Color.parseColor("#0DE320")
-    score > NORMAL_SCORE -> Color.parseColor("#EAC108")
+fun Float.toColor() = when {
+    this > GREAT_SCORE -> Color.parseColor("#0DE320")
+    this > NORMAL_SCORE -> Color.parseColor("#EAC108")
     else -> Color.parseColor("#000000")
 }
 
@@ -674,7 +674,7 @@ class RoutinesFragment : Fragment() {
             .subscribe { score ->
                 scoreTextView.animateVisible()
                 scoreTextView.text = FLOAT_FORMAT.format(score)
-                scoreTextView.setTextColor(scoreToColor(score))
+                scoreTextView.setTextColor(score.toColor())
             })
     }
 
@@ -813,7 +813,7 @@ private class DayViewContainer(view: View) : ViewContainer(view) {
     fun bind(day: CalendarDay, score: Float?) {
         textView.text = day.date.dayOfMonth.toString()
         if (score != null && score > NORMAL_SCORE) {
-            textView.setTextColor(scoreToColor(score))
+            textView.setTextColor(score.toColor())
         }
     }
 }
