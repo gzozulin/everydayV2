@@ -61,7 +61,6 @@ import org.threeten.bp.YearMonth
 import org.threeten.bp.format.TextStyle
 import org.threeten.bp.temporal.WeekFields
 import java.io.File
-import java.sql.Time
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -80,7 +79,7 @@ import java.util.concurrent.TimeUnit
 
 // region --------------------- Constants --------------------------------
 
-private const val IS_DEBUG = true
+private const val IS_DEBUG = false
 private const val MIN_CURRENT = 3
 private const val CURRENT_PART = 0.4f
 private const val PROGRESS_FULL = 10
@@ -578,6 +577,14 @@ class EverydayTabsAdapter(activity: FragmentActivity) : FragmentStateAdapter(act
     }
 }
 
+fun View.animateVisible() {
+    if (visibility != View.VISIBLE) {
+        alpha = 0f
+        animate().alpha(1f).duration = 500
+        visibility = View.VISIBLE
+    }
+}
+
 // endregion --------------------- Activity --------------------------------
 
 // region --------------------- RoutinesFragment --------------------------------
@@ -638,6 +645,7 @@ class RoutinesFragment : Fragment() {
     private fun subscribeCurrentScore() {
         disposable.add(viewModel.score.observeOn(AndroidSchedulers.mainThread())
             .subscribe { score ->
+                scoreTextView.animateVisible()
                 scoreTextView.text = FLOAT_FORMAT.format(score)
                 scoreTextView.setTextColor(
                     when {
@@ -653,8 +661,8 @@ class RoutinesFragment : Fragment() {
         backlogList.layoutManager = LinearLayoutManager(context)
         disposable.add(viewModel.backlogRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
             if (it.isNotEmpty()) {
-                headerBacklogView.visibility = View.VISIBLE
-                backlogList.visibility = View.VISIBLE
+                headerBacklogView.animateVisible()
+                backlogList.animateVisible()
                 backlogList.adapter = RoutinesAdapter(it)
             } else {
                 headerBacklogView.visibility = View.GONE
@@ -664,8 +672,8 @@ class RoutinesFragment : Fragment() {
         currentList.layoutManager = LinearLayoutManager(context)
         disposable.add(viewModel.currentRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
             if (it.isNotEmpty()) {
-                headerCurrentView.visibility = View.VISIBLE
-                currentList.visibility = View.VISIBLE
+                headerCurrentView.animateVisible()
+                currentList.animateVisible()
                 currentList.adapter = RoutinesAdapter(it)
             } else {
                 headerCurrentView.visibility = View.GONE
@@ -675,8 +683,8 @@ class RoutinesFragment : Fragment() {
         learnedList.layoutManager = LinearLayoutManager(context)
         disposable.add(viewModel.learnedRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
             if (it.isNotEmpty()) {
-                headerLearnedView.visibility = View.VISIBLE
-                learnedList.visibility = View.VISIBLE
+                headerLearnedView.animateVisible()
+                learnedList.animateVisible()
                 learnedList.adapter = RoutinesAdapter(it)
             } else {
                 headerLearnedView.visibility = View.GONE
@@ -686,8 +694,8 @@ class RoutinesFragment : Fragment() {
         pausedList.layoutManager = LinearLayoutManager(context)
         disposable.add(viewModel.pausedRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
             if (it.isNotEmpty()) {
-                headerPausedView.visibility = View.VISIBLE
-                pausedList.visibility = View.VISIBLE
+                headerPausedView.animateVisible()
+                pausedList.animateVisible()
                 pausedList.adapter = RoutinesAdapter(it)
             } else {
                 headerPausedView.visibility = View.GONE
