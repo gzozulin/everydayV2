@@ -73,6 +73,7 @@ import java.util.concurrent.TimeUnit
 // todo: export score as well
 // todo: self-set prizes
 // todo: crash reporting
+// todo: example routines on the first start
 
 // endregion --------------------- ToDo --------------------------------
 
