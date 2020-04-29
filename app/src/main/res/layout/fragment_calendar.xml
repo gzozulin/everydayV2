@@ -11,6 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:cv_dayViewResource="@layout/calendar_day_layout"
-        app:cv_monthHeaderResource="@layout/calendar_month_header"/>
+        app:cv_monthHeaderResource="@layout/calendar_month_header"
+        android:visibility="invisible"/>
 
 </LinearLayout>

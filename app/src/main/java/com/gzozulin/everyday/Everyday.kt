@@ -42,6 +42,7 @@ import com.kizitonwose.calendarview.model.CalendarMonth
 import com.kizitonwose.calendarview.ui.DayBinder
 import com.kizitonwose.calendarview.ui.MonthHeaderFooterBinder
 import com.kizitonwose.calendarview.ui.ViewContainer
+import com.kizitonwose.calendarview.utils.next
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
@@ -56,8 +57,7 @@ import org.kodein.di.generic.bind
 import org.kodein.di.generic.instance
 import org.kodein.di.generic.provider
 import org.kodein.di.generic.singleton
-import org.threeten.bp.Month
-import org.threeten.bp.YearMonth
+import org.threeten.bp.*
 import org.threeten.bp.format.TextStyle
 import org.threeten.bp.temporal.WeekFields
 import java.io.File
@@ -70,7 +70,6 @@ import java.util.concurrent.TimeUnit
 // todo: increment score anim
 // todo: rearrange the backlog?
 // todo: set reminder when device boots
-// todo: calendar, points from advance
 // todo: export score as well
 // todo: self-set prizes
 // todo: crash reporting
@@ -266,21 +265,37 @@ class EverydayViewModel : ViewModel() {
     val backlogRoutines = BehaviorSubject.create<List<Routine>>()
     val pausedRoutines = BehaviorSubject.create<List<Routine>>()
 
+    val dailyScores = BehaviorSubject.create<Map<LocalDate, Float>>()
+
     val score: Observable<Float> = currentRoutines.map { calculateCurrentScore(it) }
     val konfetti: Observable<Float> = score.filter { it > GREAT_SCORE }
 
     init {
-        disposable.add(routinesDao.subscribeAll().subscribeOn(Schedulers.io()).subscribe {
-                routines ->
-            val (backlog, current, learned, paused) = sortRoutinesByState(routines)
-            current.sortBy { it.progress }
-            backlog.sortBy { it.progress }
-            updateScores(current)
-            backlogRoutines.onNext(backlog)
-            currentRoutines.onNext(current)
-            learnedRoutines.onNext(learned)
-            pausedRoutines.onNext(paused)
-        })
+        disposable.add(routinesDao.subscribeAll()
+            .subscribeOn(Schedulers.io())
+            .subscribe { routines ->
+                val (backlog, current, learned, paused) = sortRoutinesByState(routines)
+                current.sortBy { it.progress }
+                backlog.sortBy { it.progress }
+                updateScores(current)
+                backlogRoutines.onNext(backlog)
+                currentRoutines.onNext(current)
+                learnedRoutines.onNext(learned)
+                pausedRoutines.onNext(paused)
+            })
+        disposable.add(scoreDao.subscribeAll()
+            .subscribeOn(Schedulers.io())
+            .observeOn(Schedulers.io())
+            .map { scores ->
+                val result = mutableMapOf<LocalDate, Float>()
+                for (score in scores) {
+                    val localDateTime = LocalDateTime.ofInstant(
+                        Instant.ofEpochMilli(score.timestamp), ZoneId.systemDefault())
+                    result[localDateTime.toLocalDate()] = score.score
+                }
+                return@map result
+            }
+            .subscribe { daily -> dailyScores.onNext(daily) })
     }
 
     override fun onCleared() {
@@ -585,6 +600,12 @@ fun View.animateVisible() {
     }
 }
 
+fun scoreToColor(score: Float) = when {
+    score > GREAT_SCORE -> Color.parseColor("#0DE320")
+    score > NORMAL_SCORE -> Color.parseColor("#EAC108")
+    else -> Color.parseColor("#000000")
+}
+
 // endregion --------------------- Activity --------------------------------
 
 // region --------------------- RoutinesFragment --------------------------------
@@ -642,18 +663,17 @@ class RoutinesFragment : Fragment() {
         bootstrapExportImport()
     }
 
+    override fun onDestroyView() {
+        disposable.clear()
+        super.onDestroyView()
+    }
+
     private fun subscribeCurrentScore() {
         disposable.add(viewModel.score.observeOn(AndroidSchedulers.mainThread())
             .subscribe { score ->
                 scoreTextView.animateVisible()
                 scoreTextView.text = FLOAT_FORMAT.format(score)
-                scoreTextView.setTextColor(
-                    when {
-                        score > GREAT_SCORE -> Color.parseColor("#0DE320")
-                        score > NORMAL_SCORE -> Color.parseColor("#EAC108")
-                        else -> Color.parseColor("#000000")
-                    }
-                )
+                scoreTextView.setTextColor(scoreToColor(score))
             })
     }
 
@@ -728,6 +748,8 @@ class RoutinesFragment : Fragment() {
 // region --------------------- CalendarFragment --------------------------------
 
 class CalendarFragment : Fragment() {
+    private val disposable = CompositeDisposable()
+
     @BindView(R.id.calendar)
     lateinit var calendarView: CalendarView
 
@@ -739,25 +761,43 @@ class CalendarFragment : Fragment() {
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
-        bootstrapCalendar()
+        subscribeCalendar()
     }
 
-    private fun bootstrapCalendar() {
-        calendarView.dayBinder = EverydayDayBinder()
-        calendarView.monthHeaderBinder = EverydayMonthHeaderBinder()
-        val currentMonth = YearMonth.now()
-        val firstMonth = currentMonth.minusMonths(11)
-        val firstDayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek
-        calendarView.setup(firstMonth, currentMonth, firstDayOfWeek)
-        calendarView.scrollToMonth(currentMonth)
+    override fun onDestroyView() {
+        disposable.clear()
+        super.onDestroyView()
+    }
+
+    private fun subscribeCalendar() {
+        disposable.add(viewModel.dailyScores
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { dailyScores ->
+                    GlobalScope.launch {
+                        withContext(Dispatchers.Default) {
+                            calendarView.dayBinder = EverydayDayBinder(dailyScores)
+                            calendarView.monthHeaderBinder = EverydayMonthHeaderBinder()
+                        }
+                        withContext(Dispatchers.Main) {
+                            val currentMonth = YearMonth.now()
+                            val firstMonth = currentMonth.minusMonths(11)
+                            val lastMonth = currentMonth.next
+                            val firstDayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+                            calendarView.setup(firstMonth, lastMonth, firstDayOfWeek)
+                            calendarView.animateVisible()
+                            calendarView.scrollToMonth(currentMonth)
+                        }
+                    }
+                })
     }
 }
 
-private class EverydayDayBinder : DayBinder<DayViewContainer> {
+private class EverydayDayBinder(val dailyScores: Map<LocalDate, Float>) : DayBinder<DayViewContainer> {
     override fun create(view: View) = DayViewContainer(view)
 
     override fun bind(container: DayViewContainer, day: CalendarDay) {
-        container.bind(day)
+        val score: Float? = dailyScores[day.date]
+        container.bind(day, score)
     }
 }
 
@@ -769,8 +809,11 @@ private class DayViewContainer(view: View) : ViewContainer(view) {
         ButterKnife.bind(this, view)
     }
 
-    fun bind(day: CalendarDay) {
+    fun bind(day: CalendarDay, score: Float?) {
         textView.text = day.date.dayOfMonth.toString()
+        if (score != null && score > NORMAL_SCORE) {
+            textView.setTextColor(scoreToColor(score))
+        }
     }
 }
 
