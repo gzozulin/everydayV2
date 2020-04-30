@@ -6,10 +6,10 @@ apply plugin: 'kotlin-kapt'
 android {
     signingConfigs {
         release {
-            storeFile file(kotlin_version)
+            storeFile file('C:\\dev\\everyday\\keystore\\keystore.jks')
             storePassword 'password'
             keyAlias = 'alias'
-            keyPassword 'key_password'
+            keyPassword 'password'
         }
         unsigned {
             storeFile file(kotlin_version)
@@ -39,6 +39,7 @@ android {
         multiDexEnabled true
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        signingConfig signingConfigs.release
     }
 
     buildTypes {

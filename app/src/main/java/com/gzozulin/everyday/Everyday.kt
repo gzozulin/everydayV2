@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.*
 import android.text.Editable
 import android.text.TextWatcher
@@ -39,6 +40,7 @@ import com.jakewharton.threetenabp.AndroidThreeTen
 import com.kizitonwose.calendarview.CalendarView
 import com.kizitonwose.calendarview.model.CalendarDay
 import com.kizitonwose.calendarview.model.CalendarMonth
+import com.kizitonwose.calendarview.model.DayOwner
 import com.kizitonwose.calendarview.ui.DayBinder
 import com.kizitonwose.calendarview.ui.MonthHeaderFooterBinder
 import com.kizitonwose.calendarview.ui.ViewContainer
@@ -48,6 +50,8 @@ import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
+import kotlinx.android.synthetic.main.calendar_day_layout.view.*
+import kotlinx.android.synthetic.main.calendar_month_header.view.*
 import kotlinx.coroutines.*
 import nl.dionsegijn.konfetti.KonfettiView
 import nl.dionsegijn.konfetti.models.Shape
@@ -68,9 +72,14 @@ import java.util.concurrent.TimeUnit
 
 // todo: launcher icon
 // todo: increment score anim
-// todo: rearrange the backlog?
+
+// todo: fix reminder
 // todo: set reminder when device boots
+
 // todo: export score as well
+// todo: export to the place available for the release
+// todo: versioning in export (last timestamp)
+
 // todo: self-set prizes
 // todo: crash reporting
 // todo: example routines on the first start
@@ -786,7 +795,7 @@ class CalendarFragment : Fragment() {
                             val firstDayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek
                             calendarView.setup(firstMonth, lastMonth, firstDayOfWeek)
                             calendarView.animateVisible()
-                            calendarView.scrollToMonth(currentMonth)
+                            calendarView.scrollToDate(LocalDate.now())
                         }
                     }
                 })
@@ -803,17 +812,19 @@ private class EverydayDayBinder(val dailyScores: Map<LocalDate, Float>) : DayBin
 }
 
 private class DayViewContainer(view: View) : ViewContainer(view) {
-    @BindView(R.id.dayText)
-    lateinit var textView: TextView
-
-    init {
-        ButterKnife.bind(this, view)
-    }
+    private val textView: TextView = view.dayText
 
     fun bind(day: CalendarDay, score: Float?) {
         textView.text = day.date.dayOfMonth.toString()
-        if (score != null && score > NORMAL_SCORE) {
-            textView.setTextColor(score.toColor())
+        if (day.owner == DayOwner.THIS_MONTH) {
+            if (day.date == LocalDate.now()) {
+                textView.setTextColor(Color.BLACK)
+                textView.setTypeface(null, Typeface.BOLD);
+            } else if (score != null && score > NORMAL_SCORE) {
+                textView.setTextColor(score.toColor())
+            }
+        } else {
+            textView.isEnabled = false
         }
     }
 }
@@ -827,12 +838,7 @@ private class EverydayMonthHeaderBinder : MonthHeaderFooterBinder<MonthHeaderCon
 }
 
 private class MonthHeaderContainer(view: View) : ViewContainer(view) {
-    @BindView(R.id.monthText)
-    lateinit var monthText: TextView
-
-    init {
-        ButterKnife.bind(this, view)
-    }
+    private val monthText: TextView = view.monthText
 
     fun bind(month: CalendarMonth) {
         monthText.text = Month.of(month.month).getDisplayName(TextStyle.FULL_STANDALONE, Locale.CANADA)
