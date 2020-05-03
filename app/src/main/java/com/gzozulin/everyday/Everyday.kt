@@ -63,7 +63,6 @@ import org.kodein.di.generic.provider
 import org.kodein.di.generic.singleton
 import org.threeten.bp.*
 import org.threeten.bp.format.TextStyle
-import org.threeten.bp.temporal.WeekFields
 import java.io.File
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -79,8 +78,10 @@ import java.util.concurrent.TimeUnit
 // todo: export score as well
 // todo: export to the place available for the release
 // todo: versioning in export (last timestamp)
+// todo: just export when advancing to have a snapshot everyday
 
 // todo: self-set prizes
+
 // todo: crash reporting
 // todo: example routines on the first start
 
@@ -90,7 +91,7 @@ import java.util.concurrent.TimeUnit
 
 private const val IS_DEBUG = false
 private const val MIN_CURRENT = 3
-private const val CURRENT_PART = 0.4f
+private const val CURRENT_PART = 0.5f
 private const val PROGRESS_FULL = 10
 private const val SCORE_MAX = 10f
 private const val CHANCE_TO_DOWNPLAY = 0.2
@@ -792,8 +793,7 @@ class CalendarFragment : Fragment() {
                             val currentMonth = YearMonth.now()
                             val firstMonth = currentMonth.minusMonths(11)
                             val lastMonth = currentMonth.next
-                            val firstDayOfWeek = WeekFields.of(Locale.getDefault()).firstDayOfWeek
-                            calendarView.setup(firstMonth, lastMonth, firstDayOfWeek)
+                            calendarView.setup(firstMonth, lastMonth, DayOfWeek.MONDAY)
                             calendarView.animateVisible()
                             calendarView.scrollToDate(LocalDate.now())
                         }
