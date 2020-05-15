@@ -75,7 +75,6 @@ import java.util.concurrent.TimeUnit
 // todo: fix reminder
 // todo: set reminder when device boots
 
-// todo: export score as well
 // todo: export to the place available for the release
 // todo: versioning in export (last timestamp)
 // todo: just export when advancing to have a snapshot everyday
@@ -85,12 +84,14 @@ import java.util.concurrent.TimeUnit
 // todo: crash reporting
 // todo: example routines on the first start
 
+// todo: button to add at the end of the list
+
 // endregion --------------------- ToDo --------------------------------
 
 // region --------------------- Constants --------------------------------
 
-private const val IS_DEBUG = false
-private const val MIN_CURRENT = 3
+private const val IS_DEBUG = true
+private const val MIN_CURRENT = 5
 private const val CURRENT_PART = 0.5f
 private const val PROGRESS_FULL = 10
 private const val SCORE_MAX = 10f
@@ -199,10 +200,19 @@ data class Score (
 @Dao
 interface ScoreDao {
     @Query("SELECT * FROM score")
+    fun getAll(): List<Score>
+
+    @Query("SELECT * FROM score")
     fun subscribeAll(): Observable<List<Score>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(score: Score)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(scores: List<Score>)
+
+    @Query("DELETE FROM score")
+    fun deleteAll()
 }
 
 class EverydayConverters {
@@ -267,7 +277,8 @@ class EverydayViewModel : ViewModel() {
     private val scoreDao by kodein.instance<ScoreDao>()
     private val appContext by kodein.instance<Context>()
 
-    private val exported = File(appContext.getExternalFilesDir(null), "everyday_exported")
+    private val exportedRoutines = File(appContext.getExternalFilesDir(null), "everyday_routines")
+    private val exportedScores = File(appContext.getExternalFilesDir(null), "everyday_scores")
 
     private val disposable = CompositeDisposable()
 
@@ -446,42 +457,61 @@ class EverydayViewModel : ViewModel() {
         refillCurrentFromBacklog()
     }
 
-    fun exportRoutines() {
+    fun export() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                val all = routinesDao.getAll()
+                val routines = routinesDao.getAll()
                 var result = ""
-                for (routine in all) {
+                for (routine in routines) {
                     result += "${routine.label};" +
                             "${routine.progress};" +
                             "${routine.state};" +
                             "${routine.finishedToday}\n"
                 }
-                exported.writeText(result)
+                exportedRoutines.writeText(result)
+                result = ""
+                val scores = scoreDao.getAll()
+                for (score in scores) {
+                    result += "${score.timestamp};${score.score}\n"
+                }
+                exportedScores.writeText(result)
             }
         }
     }
 
-    fun importRoutines() {
+    fun import() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                val result = mutableListOf<Routine>()
-                val text = exported.readText()
-                val lines = text.split(patternNewLine)
+                val routines = mutableListOf<Routine>()
+                var text = exportedRoutines.readText()
+                var lines = text.split(patternNewLine)
                 for (line in lines) {
                     if (line.isBlank()) {
                         continue
                     }
                     val split = line.split(patternCsv)
                     check(split.size == 4) { "Wtf? $line" }
-                    result.add(Routine(
+                    routines.add(Routine(
                         label = split[0],
                         progress = split[1].toInt(),
                         state = RoutineState.valueOf(split[2]),
                         finishedToday = split[3].toBoolean()))
                 }
                 routinesDao.deleteAll()
-                routinesDao.insertAll(result)
+                routinesDao.insertAll(routines)
+                val scores = mutableListOf<Score>()
+                text = exportedScores.readText()
+                lines = text.split(patternNewLine)
+                for (line in lines) {
+                    if (line.isBlank()) {
+                        continue
+                    }
+                    val split = line.split(patternCsv)
+                    check(split.size == 2) { "Wtf? $line" }
+                    scores.add(Score(timestamp = split[0].toLong(), score = split[1].toFloat()))
+                }
+                scoreDao.deleteAll()
+                scoreDao.insertAll(scores)
             }
         }
     }
@@ -737,11 +767,11 @@ class RoutinesFragment : Fragment() {
 
     private fun bootstrapExportImport() {
         exportButton.setOnClickListener {
-            viewModel.exportRoutines()
+            viewModel.export()
         }
         exportButton.visibility = if (IS_DEBUG) View.VISIBLE else View.GONE
         importButton.setOnClickListener {
-            viewModel.importRoutines()
+            viewModel.import()
         }
         importButton.visibility = if (IS_DEBUG) View.VISIBLE else View.GONE
     }
