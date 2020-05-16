@@ -82,6 +82,8 @@ import java.util.concurrent.TimeUnit
 // todo: crash reporting
 // todo: example routines on the first start
 
+// todo: fully done items worth at least 0.1
+
 // endregion --------------------- ToDo --------------------------------
 
 // region --------------------- Constants --------------------------------
