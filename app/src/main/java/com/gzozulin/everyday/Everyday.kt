@@ -1,9 +1,8 @@
 package com.gzozulin.everyday
 
-import android.app.*
-import android.content.BroadcastReceiver
+import android.app.AlertDialog
+import android.app.Application
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
@@ -18,9 +17,6 @@ import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat.getSystemService
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
@@ -33,7 +29,6 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import butterknife.BindView
 import butterknife.ButterKnife
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import com.jakewharton.threetenabp.AndroidThreeTen
@@ -52,7 +47,10 @@ import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.BehaviorSubject
 import kotlinx.android.synthetic.main.calendar_day_layout.view.*
 import kotlinx.android.synthetic.main.calendar_month_header.view.*
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import nl.dionsegijn.konfetti.KonfettiView
 import nl.dionsegijn.konfetti.models.Shape
 import nl.dionsegijn.konfetti.models.Size
@@ -84,18 +82,13 @@ import java.util.concurrent.TimeUnit
 // todo: crash reporting
 // todo: example routines on the first start
 
-// todo: button to add at the end of the list
-
 // endregion --------------------- ToDo --------------------------------
 
 // region --------------------- Constants --------------------------------
 
-private const val IS_DEBUG = true
-private const val MIN_CURRENT = 5
-private const val CURRENT_PART = 0.5f
+private const val IS_DEBUG = false
 private const val PROGRESS_FULL = 10
 private const val SCORE_MAX = 10f
-private const val CHANCE_TO_DOWNPLAY = 0.2
 private const val FLOAT_FORMAT = "%.1f"
 private const val NORMAL_SCORE = 3.9
 private const val GREAT_SCORE = 7.9
@@ -109,8 +102,6 @@ private val weekends = listOf(Calendar.SATURDAY, Calendar.SUNDAY)
 
 private val patternNewLine = "\n".toPattern()
 private val patternCsv = ";".toPattern()
-
-private val random = Random()
 
 // endregion --------------------- Constants --------------------------------
 
@@ -134,7 +125,7 @@ class EverydayApp : Application() {
         super.onCreate()
         AndroidThreeTen.init(this)
         appContext = applicationContext
-        updateReminderAlarm(this)
+        //updateReminderAlarm(this)
     }
 }
 
@@ -143,7 +134,7 @@ class EverydayApp : Application() {
 // region --------------------- Storage --------------------------------
 
 enum class RoutineState {
-    BACKLOG, CURRENT, LEARNED, PAUSED
+    CURRENT, BACKLOG
 }
 
 @Entity
@@ -151,13 +142,10 @@ data class Routine(
     @PrimaryKey(autoGenerate = true) val uid: Long = 0,
     @ColumnInfo var label: String,
     @ColumnInfo var progress: Int = 0,
-    @ColumnInfo var state: RoutineState = RoutineState.BACKLOG,
+    @ColumnInfo var state: RoutineState = RoutineState.CURRENT,
     @ColumnInfo var finishedToday: Boolean = false,
 
     var currentScore: Float = 0f) {
-
-    val isLearned: Boolean
-        get() = progress == PROGRESS_FULL
 
     val lackingProgress: Int
         get() = PROGRESS_FULL - progress
@@ -223,7 +211,7 @@ class EverydayConverters {
     fun toRoutineState(state: Int) = RoutineState.values()[state]
 }
 
-@Database(entities = [Routine::class, Score::class], version = 7)
+@Database(entities = [Routine::class, Score::class], version = 8)
 @TypeConverters(EverydayConverters::class)
 abstract class EverydayDb : RoomDatabase() {
     abstract fun routineDao(): RoutineDao
@@ -250,26 +238,20 @@ private class EverydayKeyValue(context: Context) {
 // region --------------------- ViewModel --------------------------------
 
 data class SortedRoutines(
-    val backlog: MutableList<Routine>,
     val current: MutableList<Routine>,
-    val learned: MutableList<Routine>,
-    val paused: MutableList<Routine>
+    val backlog: MutableList<Routine>
 )
 
 private fun sortRoutinesByState(routines: List<Routine>): SortedRoutines {
     val backlog = mutableListOf<Routine>()
     val current = mutableListOf<Routine>()
-    val learned = mutableListOf<Routine>()
-    val paused = mutableListOf<Routine>()
     for (routine in routines) {
         when (routine.state) {
-            RoutineState.BACKLOG -> backlog.add(routine)
             RoutineState.CURRENT -> current.add(routine)
-            RoutineState.LEARNED -> learned.add(routine)
-            RoutineState.PAUSED -> paused.add(routine)
+            RoutineState.BACKLOG -> backlog.add(routine)
         }
     }
-    return SortedRoutines(backlog, current, learned, paused)
+    return SortedRoutines(current, backlog)
 }
 
 class EverydayViewModel : ViewModel() {
@@ -282,10 +264,8 @@ class EverydayViewModel : ViewModel() {
 
     private val disposable = CompositeDisposable()
 
-    val learnedRoutines = BehaviorSubject.create<List<Routine>>()
     val currentRoutines = BehaviorSubject.create<List<Routine>>()
     val backlogRoutines = BehaviorSubject.create<List<Routine>>()
-    val pausedRoutines = BehaviorSubject.create<List<Routine>>()
 
     val dailyScores = BehaviorSubject.create<Map<LocalDate, Float>>()
 
@@ -296,14 +276,12 @@ class EverydayViewModel : ViewModel() {
         disposable.add(routinesDao.subscribeAll()
             .subscribeOn(Schedulers.io())
             .subscribe { routines ->
-                val (backlog, current, learned, paused) = sortRoutinesByState(routines)
+                val (current, backlog) = sortRoutinesByState(routines)
                 current.sortBy { it.progress }
                 backlog.sortBy { it.progress }
                 updateScores(current)
                 backlogRoutines.onNext(backlog)
                 currentRoutines.onNext(current)
-                learnedRoutines.onNext(learned)
-                pausedRoutines.onNext(paused)
             })
         disposable.add(scoreDao.subscribeAll()
             .subscribeOn(Schedulers.io())
@@ -354,7 +332,7 @@ class EverydayViewModel : ViewModel() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 val routines = routinesDao.getAll()
-                val (backlog, current, learned, _) = sortRoutinesByState(routines)
+                val (current, backlog) = sortRoutinesByState(routines)
                 scoreDao.insert(Score(0L, timestamp = timestamp, score = calculateCurrentScore(current)))
                 val currIter = current.iterator()
                 while (currIter.hasNext()) {
@@ -362,50 +340,13 @@ class EverydayViewModel : ViewModel() {
                     if (routine.finishedToday) {
                         routine.finishedToday = false
                         routine.progress += 1
-                        if (routine.isLearned) {
-                            routine.state = RoutineState.LEARNED
-                            currIter.remove()
-                            learned.add(routine)
-                        }
                     } else if (routine.progress > 0 && !todayIsWeekend()) {
                         routine.progress -= 1
                     }
                 }
-                val learIter = learned.iterator()
-                while (learIter.hasNext()) {
-                    val routine = learIter.next()
-                    if (random.nextFloat() < CHANCE_TO_DOWNPLAY) {
-                        routine.progress -= 1
-                        routine.state = RoutineState.BACKLOG
-                        learIter.remove()
-                        backlog.add(routine)
-                    }
-                }
                 routinesDao.insertAll(backlog)
                 routinesDao.insertAll(current)
-                routinesDao.insertAll(learned)
             }
-        }
-        refillCurrentFromBacklog()
-    }
-
-    private fun refillCurrentFromBacklog() {
-        viewModelScope.launch {
-            val routines = routinesDao.getAll()
-            val (backlog, current, learned, _) = sortRoutinesByState(routines)
-            val activeCnt = backlog.size + current.size + learned.size
-            val expectedCurrentCnt = maxOf(MIN_CURRENT, (activeCnt * CURRENT_PART).toInt())
-            if (current.size >= expectedCurrentCnt) {
-                return@launch
-            }
-            backlog.sortBy { it.progress }
-            while (backlog.isNotEmpty() && current.size < expectedCurrentCnt) {
-                val routine = backlog.removeAt(0)
-                routine.state = RoutineState.CURRENT
-                current.add(routine)
-            }
-            routinesDao.insertAll(backlog)
-            routinesDao.insertAll(current)
         }
     }
 
@@ -415,7 +356,6 @@ class EverydayViewModel : ViewModel() {
                 routinesDao.insert(routine)
             }
         }
-        refillCurrentFromBacklog()
     }
 
     // todo: make specific instances of the call (rename, finish, etc)
@@ -433,15 +373,13 @@ class EverydayViewModel : ViewModel() {
                 routinesDao.delete(routine)
             }
         }
-        refillCurrentFromBacklog()
     }
 
     fun pauseRoutine(routine: Routine) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                routine.state = RoutineState.PAUSED
+                routine.state = RoutineState.BACKLOG
                 routinesDao.insert(routine)
-                refillCurrentFromBacklog()
             }
         }
     }
@@ -449,12 +387,11 @@ class EverydayViewModel : ViewModel() {
     fun continueRoutine(routine: Routine) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                routine.state = if (routine.isLearned) RoutineState.LEARNED else RoutineState.BACKLOG
+                routine.state = RoutineState.CURRENT
                 routine.finishedToday = false
                 routinesDao.insert(routine)
             }
         }
-        refillCurrentFromBacklog()
     }
 
     fun export() {
@@ -535,9 +472,6 @@ class MainActivity : AppCompatActivity() {
     @BindView(R.id.konfetti)
     lateinit var viewKonfetti: KonfettiView
 
-    @BindView(R.id.add)
-    lateinit var addButton: FloatingActionButton
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         viewModel = ViewModelProvider(this).get(EverydayViewModel::class.java)
@@ -545,8 +479,7 @@ class MainActivity : AppCompatActivity() {
         ButterKnife.bind(this)
         createTabs()
         subscribeKonfetti()
-        bootstrapAdd()
-        createNotificationChannel(this)
+        //createNotificationChannel(this)
     }
 
     override fun onResume() {
@@ -568,12 +501,6 @@ class MainActivity : AppCompatActivity() {
                 else -> TODO()
             }
         }.attach()
-    }
-
-    private fun bootstrapAdd() {
-        addButton.setOnClickListener {
-            showAddDialog(this)
-        }
     }
 
     private fun subscribeKonfetti() {
@@ -669,17 +596,8 @@ class RoutinesFragment : Fragment() {
     @BindView(R.id.backlog)
     lateinit var backlogList: RecyclerView
 
-    @BindView(R.id.header_learned)
-    lateinit var headerLearnedView: View
-
-    @BindView(R.id.learned)
-    lateinit var learnedList: RecyclerView
-
-    @BindView(R.id.header_paused)
-    lateinit var headerPausedView: View
-
-    @BindView(R.id.paused)
-    lateinit var pausedList: RecyclerView
+    @BindView(R.id.add)
+    lateinit var addButton: Button
 
     @BindView(R.id.advance)
     lateinit var advanceButton: Button
@@ -700,6 +618,7 @@ class RoutinesFragment : Fragment() {
         super.onActivityCreated(savedInstanceState)
         subscribeCurrentScore()
         subscribeRoutines()
+        bootstrapAdd()
         bootstrapAdvance()
         bootstrapExportImport()
     }
@@ -741,28 +660,12 @@ class RoutinesFragment : Fragment() {
                 currentList.visibility = View.GONE
             }
         })
-        learnedList.layoutManager = LinearLayoutManager(context)
-        disposable.add(viewModel.learnedRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
-            if (it.isNotEmpty()) {
-                headerLearnedView.animateVisible()
-                learnedList.animateVisible()
-                learnedList.adapter = RoutinesAdapter(it)
-            } else {
-                headerLearnedView.visibility = View.GONE
-                learnedList.visibility = View.GONE
-            }
-        })
-        pausedList.layoutManager = LinearLayoutManager(context)
-        disposable.add(viewModel.pausedRoutines.observeOn(AndroidSchedulers.mainThread()).subscribe {
-            if (it.isNotEmpty()) {
-                headerPausedView.animateVisible()
-                pausedList.animateVisible()
-                pausedList.adapter = RoutinesAdapter(it)
-            } else {
-                headerPausedView.visibility = View.GONE
-                pausedList.visibility = View.GONE
-            }
-        })
+    }
+
+    private fun bootstrapAdd() {
+        addButton.setOnClickListener {
+            showAddDialog(context!!)
+        }
     }
 
     private fun bootstrapExportImport() {
@@ -930,12 +833,12 @@ private fun showUpdateDialog(context: Context, routine: Routine) {
         dialog.dismiss()
         viewModel.pauseRoutine(routine)
     }
-    pauseButton.visibility = if (routine.state != RoutineState.PAUSED) View.VISIBLE else View.GONE
+    pauseButton.visibility = if (routine.state != RoutineState.BACKLOG) View.VISIBLE else View.GONE
     continueButton.setOnClickListener {
         dialog.dismiss()
         viewModel.continueRoutine(routine)
     }
-    continueButton.visibility = if (routine.state == RoutineState.PAUSED) View.VISIBLE else View.GONE
+    continueButton.visibility = if (routine.state == RoutineState.BACKLOG) View.VISIBLE else View.GONE
     updateButton.setOnClickListener {
         dialog.dismiss()
         routine.label = labelEditText.text.toString()
@@ -969,7 +872,7 @@ private class RoutineViewHolder(itemView: View) : RecyclerView.ViewHolder(itemVi
 
     fun bind(routine: Routine) {
         labelTextView.text = routine.label
-        labelTextView.isEnabled = routine.state != RoutineState.PAUSED
+        labelTextView.isEnabled = routine.state != RoutineState.BACKLOG
         if (routine.progress != 0) {
             progressProgressBar.visibility = View.VISIBLE
             progressProgressBar.progress = routine.fullProgress
@@ -1013,7 +916,7 @@ private class RoutinesAdapter(val items: List<Routine>)
 
 // region --------------------- Reminder --------------------------------
 
-private fun updateReminderAlarm(context: Context) {
+/*private fun updateReminderAlarm(context: Context) {
     val notificationIntent = Intent(context, ReminderPublisher::class.java)
     val pendingIntent = PendingIntent.getBroadcast(context, 0, notificationIntent,
         PendingIntent.FLAG_UPDATE_CURRENT)
@@ -1076,6 +979,6 @@ private suspend fun showReminderNotification(context: Context) = withContext(Dis
         .setAutoCancel(true)
         .priority = NotificationCompat.PRIORITY_DEFAULT
     NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
-}
+}*/
 
 // endregion --------------------- Reminder --------------------------------

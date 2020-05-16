@@ -17,17 +17,6 @@
         android:layout_height="wrap_content"
         android:layout_below="@id/tab_layout"/>
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/add"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="end"
-        android:layout_alignParentRight="true"
-        android:layout_alignParentBottom="true"
-        android:layout_margin="32dp"
-        android:layout_alignParentEnd="true"
-        android:src="@drawable/new_routine"/>
-
     <nl.dionsegijn.konfetti.KonfettiView
         android:id="@+id/konfetti"
         android:layout_width="match_parent"
