@@ -69,6 +69,7 @@ import java.util.concurrent.TimeUnit
 
 // todo: launcher icon
 // todo: increment score anim
+// todo: debounce for konffetti
 
 // todo: fix reminder
 // todo: set reminder when device boots
@@ -83,6 +84,11 @@ import java.util.concurrent.TimeUnit
 // todo: example routines on the first start
 
 // todo: fully done items worth at least 0.1
+// todo: maybe weight for items to prioritise points?
+
+// todo: add feedback option
+
+// todo: bug with layout after adding routine
 
 // endregion --------------------- ToDo --------------------------------
 
