@@ -95,6 +95,7 @@ import java.util.concurrent.TimeUnit
 // region --------------------- Constants --------------------------------
 
 private const val IS_DEBUG = false
+
 private const val PROGRESS_FULL = 10
 private const val SCORE_MAX = 10f
 private const val FLOAT_FORMAT = "%.1f"
@@ -163,6 +164,9 @@ data class Routine(
 
     val isCurrent: Boolean
         get() = state == RoutineState.CURRENT
+
+    val isDone: Boolean
+        get() = progress == PROGRESS_FULL
 }
 
 @Dao
@@ -345,7 +349,7 @@ class EverydayViewModel : ViewModel() {
                 val currIter = current.iterator()
                 while (currIter.hasNext()) {
                     val routine = currIter.next()
-                    if (routine.finishedToday) {
+                    if (routine.progress < PROGRESS_FULL && routine.finishedToday) {
                         routine.finishedToday = false
                         routine.progress += 1
                     } else if (routine.progress > 0 && !todayIsWeekend()) {
@@ -888,7 +892,7 @@ private class RoutineViewHolder(itemView: View) : RecyclerView.ViewHolder(itemVi
         } else {
             progressProgressBar.visibility = View.GONE
         }
-        doneButton.text = FLOAT_FORMAT.format(routine.currentScore)
+        doneButton.text = if (routine.isDone) "DONE" else FLOAT_FORMAT.format(routine.currentScore)
         doneButton.visibility = if (routine.isCurrent && !routine.finishedToday) View.VISIBLE else View.GONE
         doneButton.setOnClickListener {
             routine.finishedToday = true
