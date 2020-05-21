@@ -83,7 +83,6 @@ import java.util.concurrent.TimeUnit
 // todo: crash reporting
 // todo: example routines on the first start
 
-// todo: fully done items worth at least 0.1
 // todo: maybe weight for items to prioritise points?
 
 // todo: add feedback option
@@ -156,17 +155,15 @@ data class Routine(
 
     var currentScore: Float = 0f) {
 
+    //  fully done items still worth a bit
     val lackingProgress: Int
-        get() = PROGRESS_FULL - progress
+        get() = PROGRESS_FULL - progress + 1
 
     val fullProgress: Int
         get() = progress + if (finishedToday) 1 else 0
 
     val isCurrent: Boolean
         get() = state == RoutineState.CURRENT
-
-    val isDone: Boolean
-        get() = progress == PROGRESS_FULL
 }
 
 @Dao
@@ -892,7 +889,7 @@ private class RoutineViewHolder(itemView: View) : RecyclerView.ViewHolder(itemVi
         } else {
             progressProgressBar.visibility = View.GONE
         }
-        doneButton.text = if (routine.isDone) "DONE" else FLOAT_FORMAT.format(routine.currentScore)
+        doneButton.text = FLOAT_FORMAT.format(routine.currentScore)
         doneButton.visibility = if (routine.isCurrent && !routine.finishedToday) View.VISIBLE else View.GONE
         doneButton.setOnClickListener {
             routine.finishedToday = true
