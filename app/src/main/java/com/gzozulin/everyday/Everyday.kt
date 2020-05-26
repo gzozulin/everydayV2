@@ -64,21 +64,21 @@ import org.threeten.bp.format.TextStyle
 import java.io.File
 import java.util.*
 import java.util.concurrent.TimeUnit
+import kotlin.math.min
 
 // region --------------------- ToDo --------------------------------
 
 // todo: launcher icon
 // todo: increment score anim
 // todo: debounce for konffetti
+// todo: 10 points - show a small badge
+// todo: show median score for the month
+// todo: self-set prizes
 
 // todo: fix reminder
 // todo: set reminder when device boots
 
 // todo: export to the place available for the release
-// todo: versioning in export (last timestamp)
-// todo: just export when advancing to have a snapshot everyday
-
-// todo: self-set prizes
 
 // todo: crash reporting
 // todo: example routines on the first start
@@ -88,6 +88,10 @@ import java.util.concurrent.TimeUnit
 // todo: add feedback option
 
 // todo: bug with layout after adding routine
+
+// todo: some items are available only during time frame (breakfast before 12)
+
+// bug: advancement happens on the next day, but weekend counts today?
 
 // endregion --------------------- ToDo --------------------------------
 
@@ -346,9 +350,9 @@ class EverydayViewModel : ViewModel() {
                 val currIter = current.iterator()
                 while (currIter.hasNext()) {
                     val routine = currIter.next()
-                    if (routine.progress < PROGRESS_FULL && routine.finishedToday) {
+                    if (routine.finishedToday) {
                         routine.finishedToday = false
-                        routine.progress += 1
+                        routine.progress = min(routine.progress + 1, PROGRESS_FULL)
                     } else if (routine.progress > 0 && !todayIsWeekend()) {
                         routine.progress -= 1
                     }
@@ -882,7 +886,7 @@ private class RoutineViewHolder(itemView: View) : RecyclerView.ViewHolder(itemVi
     fun bind(routine: Routine) {
         labelTextView.text = routine.label
         labelTextView.isEnabled = routine.state != RoutineState.BACKLOG
-        if (routine.progress != 0) {
+        if (routine.progress != 0 && routine.state != RoutineState.BACKLOG) {
             progressProgressBar.visibility = View.VISIBLE
             progressProgressBar.progress = routine.fullProgress
             progressProgressBar.max = PROGRESS_FULL
