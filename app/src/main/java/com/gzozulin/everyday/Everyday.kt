@@ -91,7 +91,9 @@ import kotlin.math.min
 
 // todo: some items are available only during time frame (breakfast before 12)
 
-// bug: advancement happens on the next day, but weekend counts today?
+// todo: bug: advancement happens on the next day, but weekend counts today? (check for prev day)
+
+// todo: everytime: other cyclic rates (once in a month, once in a week, once in a year)
 
 // endregion --------------------- ToDo --------------------------------
 
@@ -886,7 +888,8 @@ private class RoutineViewHolder(itemView: View) : RecyclerView.ViewHolder(itemVi
     fun bind(routine: Routine) {
         labelTextView.text = routine.label
         labelTextView.isEnabled = routine.state != RoutineState.BACKLOG
-        if (routine.progress != 0 && routine.state != RoutineState.BACKLOG) {
+        if ((routine.state != RoutineState.BACKLOG) &&
+            (routine.progress != 0 || routine.finishedToday)) {
             progressProgressBar.visibility = View.VISIBLE
             progressProgressBar.progress = routine.fullProgress
             progressProgressBar.max = PROGRESS_FULL
