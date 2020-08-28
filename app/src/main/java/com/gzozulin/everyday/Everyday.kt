@@ -74,26 +74,18 @@ import kotlin.math.min
 // todo: 10 points - show a small badge
 // todo: show median score for the month
 // todo: self-set prizes
-
 // todo: fix reminder
 // todo: set reminder when device boots
-
 // todo: export to the place available for the release
-
 // todo: crash reporting
 // todo: example routines on the first start
-
 // todo: maybe weight for items to prioritise points?
-
 // todo: add feedback option
-
 // todo: bug with layout after adding routine
-
 // todo: some items are available only during time frame (breakfast before 12)
-
 // todo: bug: advancement happens on the next day, but weekend counts today? (check for prev day)
-
 // todo: everytime: other cyclic rates (once in a month, once in a week, once in a year)
+// todo: "continue" button for paused routines can be available from the main screen
 
 // endregion --------------------- ToDo --------------------------------
 
